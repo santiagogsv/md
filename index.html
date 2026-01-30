@@ -7,7 +7,7 @@
     <script>
       document.documentElement.classList.toggle(
         "toc-open",
-        !window.matchMedia("(max-width: 900px)").matches
+        !window.matchMedia("(max-width: 900px)").matches,
       );
     </script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -29,6 +29,8 @@
         --content-pad-y: 5rem;
         --content-pad-x-mobile: 1.5rem;
         --content-pad-y-mobile: 4rem;
+        --floating-offset-top: 0px;
+        --floating-clearance: 4.25rem;
       }
       @media (prefers-color-scheme: dark) {
         :root {
@@ -91,11 +93,17 @@
         padding: 0.375rem 0;
         text-decoration: none;
         color: var(--ink);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       #toc-list .empty {
         color: var(--muted);
         font-size: 1rem;
         line-height: 1.6;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       #content {
         flex: 1;
@@ -104,7 +112,7 @@
       }
       #toc-toggle {
         position: fixed;
-        top: 1.25rem;
+        top: calc(1.25rem + var(--floating-offset-top));
         left: calc(var(--toc-width) + var(--content-pad-x));
         z-index: 30;
         border: 1px solid var(--border);
@@ -115,6 +123,35 @@
         font-size: 0.9rem;
         cursor: pointer;
         box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+      }
+      #file-open {
+        position: fixed;
+        top: calc(1.25rem + var(--floating-offset-top));
+        right: 1.5rem;
+        z-index: 30;
+        width: 2.5rem;
+        height: 2.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--ink);
+        font-size: 1.4rem;
+        line-height: 1;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+      }
+      #toc-toggle,
+      #file-open {
+        transform: translate3d(0, 0, 0);
+        backface-visibility: hidden;
+        will-change: transform;
+      }
+      #file-open:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
       }
       #toc-toggle:focus-visible {
         outline: 2px solid var(--ink);
@@ -130,7 +167,7 @@
         z-index: 10;
       }
       #content[data-empty="true"]::before {
-        content: "Drop a .md file here or click to choose.";
+        content: "Drop a .md file here or use the + button.";
         display: block;
         margin-bottom: 20px;
         color: var(--muted);
@@ -153,7 +190,9 @@
       #output h5,
       #output h6 {
         margin-top: 2em;
-        scroll-margin-top: 24px;
+        scroll-margin-top: calc(
+          var(--floating-clearance) + var(--floating-offset-top)
+        );
       }
       #output pre {
         background: #1c1c1c;
@@ -208,10 +247,14 @@
           pointer-events: auto;
         }
         #content {
-          padding: var(--content-pad-y-mobile) var(--content-pad-x-mobile) 3.5rem;
+          padding: var(--content-pad-y-mobile) var(--content-pad-x-mobile)
+            3.5rem;
         }
         #toc-toggle {
           left: var(--content-pad-x-mobile);
+        }
+        #file-open {
+          right: 1rem;
         }
       }
       @media (min-width: 901px) {
@@ -227,15 +270,23 @@
     </style>
   </head>
   <body>
-    <button id="toc-toggle" type="button" aria-controls="toc" aria-expanded="true">
+    <button
+      id="toc-toggle"
+      type="button"
+      aria-controls="toc"
+      aria-expanded="true"
+    >
       Contents
+    </button>
+    <button id="file-open" type="button" aria-label="Open markdown file">
+      +
     </button>
     <div id="toc-scrim" aria-hidden="true"></div>
     <div id="layout">
       <aside id="toc" aria-label="Table of contents">
         <div id="toc-title">Contents</div>
         <nav id="toc-list">
-          <p class="empty">Drop a .md file anywhere</p>
+          <p class="empty">Drop a .md file or use the + button</p>
         </nav>
       </aside>
       <main id="content" data-empty="true">
@@ -261,6 +312,7 @@
       const toc = $("toc");
       const tocToggle = $("toc-toggle");
       const tocScrim = $("toc-scrim");
+      const fileOpen = $("file-open");
       const tocMedia = window.matchMedia("(max-width: 900px)");
       let tocOpen = root.classList.contains("toc-open");
 
@@ -273,6 +325,20 @@
       }
 
       setTocOpen(tocOpen);
+
+      function syncFloatingOffset() {
+        if (!window.visualViewport) {
+          return;
+        }
+        const offsetTop = Math.max(0, window.visualViewport.offsetTop || 0);
+        root.style.setProperty("--floating-offset-top", `${offsetTop}px`);
+      }
+
+      if (window.visualViewport) {
+        syncFloatingOffset();
+        window.visualViewport.addEventListener("resize", syncFloatingOffset);
+        window.visualViewport.addEventListener("scroll", syncFloatingOffset);
+      }
 
       function setEmptyState(isEmpty, message) {
         content.dataset.empty = String(isEmpty);
@@ -399,14 +465,7 @@
         handleFile(file);
       });
 
-      document.addEventListener("click", (event) => {
-        if (content.dataset.empty !== "true") {
-          return;
-        }
-        const target = event.target;
-        if (target === tocToggle || target === tocScrim || toc.contains(target)) {
-          return;
-        }
+      fileOpen.addEventListener("click", () => {
         fileInput.click();
       });
 
@@ -436,13 +495,9 @@
       });
 
       window.addEventListener("load", () => {
-        if (location.protocol === "file:") {
-          setEmptyState(true, "Drop a .md file anywhere or click to choose");
-          return;
-        }
-        fetch("./sample.md")
+        fetch("./intro.md")
           .then((response) => response.text())
-          .then((md) => md && renderMarkdown(md, "Viewing sample.md"))
+          .then((md) => md && renderMarkdown(md, "Viewing intro.md"))
           .catch(() => setEmptyState(true, "No file loaded"));
       });
     </script>
