@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Minimal Markdown Viewer</title>
+    <link rel="icon" type="image/png" href="md.png" />
+    <link rel="apple-touch-icon" href="md.png" />
     <script>
       document.documentElement.classList.toggle(
         "toc-open",
@@ -223,6 +225,12 @@
         #layout {
           flex-direction: column;
         }
+        #toc-toggle,
+        #file-open {
+          position: absolute;
+          transform: none;
+          will-change: auto;
+        }
         #toc {
           position: fixed;
           top: 0;
@@ -327,7 +335,8 @@
       setTocOpen(tocOpen);
 
       function syncFloatingOffset() {
-        if (!window.visualViewport) {
+        if (!window.visualViewport || tocMedia.matches) {
+          root.style.setProperty("--floating-offset-top", "0px");
           return;
         }
         const offsetTop = Math.max(0, window.visualViewport.offsetTop || 0);
@@ -338,6 +347,9 @@
         syncFloatingOffset();
         window.visualViewport.addEventListener("resize", syncFloatingOffset);
         window.visualViewport.addEventListener("scroll", syncFloatingOffset);
+        if (tocMedia.addEventListener) {
+          tocMedia.addEventListener("change", syncFloatingOffset);
+        }
       }
 
       function setEmptyState(isEmpty, message) {
