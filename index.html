@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Minimal Markdown Viewer</title>
+    <script>
+      document.documentElement.classList.toggle(
+        "toc-open",
+        !window.matchMedia("(max-width: 900px)").matches
+      );
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/contrib/auto-render.min.js"></script>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --panel: #f5f5f5;
+        --ink: #111111;
+        --muted: #6b6b6b;
+        --border: #e1e1e1;
+        --toc-width: 15rem;
+        --content-pad-x: 3.5rem;
+        --content-pad-y: 5rem;
+        --content-pad-x-mobile: 1.5rem;
+        --content-pad-y-mobile: 4rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #111111;
+          --panel: #1a1a1a;
+          --ink: #f5f5f5;
+          --muted: #9a9a9a;
+          --border: #2a2a2a;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+          Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      a {
+        color: inherit;
+      }
+      #layout {
+        display: flex;
+        min-height: 100vh;
+      }
+      #toc {
+        width: var(--toc-width);
+        padding: 1.5rem 1.25rem;
+        border-right: 1px solid var(--border);
+        background: var(--panel);
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow: auto;
+        transition:
+          width 0.25s ease,
+          transform 0.25s ease,
+          padding 0.25s ease,
+          border-color 0.25s ease;
+      }
+      #toc > * {
+        transition: opacity 0.2s ease;
+      }
+      #toc-title {
+        font-size: 1rem;
+        color: var(--muted);
+        margin-bottom: 1rem;
+      }
+      #toc-list ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+      }
+      #toc-list a {
+        display: block;
+        padding: 0.375rem 0;
+        text-decoration: none;
+        color: var(--ink);
+      }
+      #toc-list .empty {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+      #content {
+        flex: 1;
+        padding: var(--content-pad-y) var(--content-pad-x) 4.5rem;
+        max-width: 60rem;
+      }
+      #toc-toggle {
+        position: fixed;
+        top: 1.25rem;
+        left: calc(var(--toc-width) + var(--content-pad-x));
+        z-index: 30;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--ink);
+        border-radius: 999px;
+        padding: 0.45rem 0.9rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+      }
+      #toc-toggle:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 2px;
+      }
+      #toc-scrim {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.25);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+        z-index: 10;
+      }
+      #content[data-empty="true"]::before {
+        content: "Drop a .md file here or click to choose.";
+        display: block;
+        margin-bottom: 20px;
+        color: var(--muted);
+      }
+      #file-meta {
+        font-size: 1rem;
+        color: var(--muted);
+        margin-bottom: 0.75rem;
+      }
+      #output {
+        line-height: 1.75;
+      }
+      #output > :first-child {
+        margin-top: 0;
+      }
+      #output h1,
+      #output h2,
+      #output h3,
+      #output h4,
+      #output h5,
+      #output h6 {
+        margin-top: 2em;
+        scroll-margin-top: 24px;
+      }
+      #output pre {
+        background: #1c1c1c;
+        color: #f5f5f5;
+        padding: 1rem;
+        border-radius: 0.375rem;
+        overflow: auto;
+      }
+      #output code {
+        font-family: inherit;
+      }
+      @media (min-width: 901px) {
+        html:not(.toc-open) #toc {
+          width: 0;
+          padding: 0;
+          border-right-color: transparent;
+          overflow: hidden;
+        }
+        html:not(.toc-open) #toc > * {
+          opacity: 0;
+          pointer-events: none;
+        }
+        html:not(.toc-open) #toc-toggle {
+          left: var(--content-pad-x);
+        }
+      }
+      @media (max-width: 900px) {
+        #layout {
+          flex-direction: column;
+        }
+        #toc {
+          position: fixed;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: min(80vw, 20rem);
+          height: 100vh;
+          border-right: 1px solid var(--border);
+          border-bottom: none;
+          transform: translateX(-100%);
+          z-index: 20;
+          padding-top: var(--content-pad-y-mobile);
+          padding-left: var(--content-pad-x-mobile);
+          padding-right: var(--content-pad-x-mobile);
+        }
+        html.toc-open #toc {
+          transform: translateX(0);
+          box-shadow: 16px 0 30px rgba(0, 0, 0, 0.2);
+        }
+        html.toc-open #toc-scrim {
+          opacity: 1;
+          pointer-events: auto;
+        }
+        #content {
+          padding: var(--content-pad-y-mobile) var(--content-pad-x-mobile) 3.5rem;
+        }
+        #toc-toggle {
+          left: var(--content-pad-x-mobile);
+        }
+      }
+      @media (min-width: 901px) {
+        #toc-scrim {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <button id="toc-toggle" type="button" aria-controls="toc" aria-expanded="true">
+      Contents
+    </button>
+    <div id="toc-scrim" aria-hidden="true"></div>
+    <div id="layout">
+      <aside id="toc" aria-label="Table of contents">
+        <div id="toc-title">Contents</div>
+        <nav id="toc-list">
+          <p class="empty">Drop a .md file anywhere</p>
+        </nav>
+      </aside>
+      <main id="content" data-empty="true">
+        <div id="file-meta">No file loaded</div>
+        <article id="output"></article>
+      </main>
+    </div>
+    <input
+      id="file-input"
+      type="file"
+      accept=".md,.markdown,text/markdown"
+      hidden
+    />
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const root = document.documentElement;
+      const content = $("content");
+      const output = $("output");
+      const fileMeta = $("file-meta");
+      const fileInput = $("file-input");
+      const tocList = $("toc-list");
+      const toc = $("toc");
+      const tocToggle = $("toc-toggle");
+      const tocScrim = $("toc-scrim");
+      const tocMedia = window.matchMedia("(max-width: 900px)");
+      let tocOpen = root.classList.contains("toc-open");
+
+      function setTocOpen(next) {
+        tocOpen = next;
+        root.classList.toggle("toc-open", tocOpen);
+        tocToggle.setAttribute("aria-expanded", String(tocOpen));
+        tocToggle.textContent = tocOpen ? "Hide contents" : "Show contents";
+        toc.setAttribute("aria-hidden", String(!tocOpen));
+      }
+
+      setTocOpen(tocOpen);
+
+      function setEmptyState(isEmpty, message) {
+        content.dataset.empty = String(isEmpty);
+        if (message !== undefined) {
+          fileMeta.textContent = message;
+        }
+        if (isEmpty) {
+          output.innerHTML = "";
+        }
+      }
+
+      function slugify(value) {
+        let raw = "";
+        if (typeof value === "string") {
+          raw = value;
+        } else if (value && typeof value.text === "string") {
+          raw = value.text;
+        } else if (value && typeof value.raw === "string") {
+          raw = value.raw;
+        }
+        const base = raw
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, "-")
+          .replace(/[^\w-]+/g, "")
+          .replace(/^-+|-+$/g, "");
+        return base || "section";
+      }
+
+      function renderMath() {
+        if (!window.renderMathInElement) {
+          return;
+        }
+        renderMathInElement(output, {
+          delimiters: [
+            { left: "$$", right: "$$", display: true },
+            { left: "$", right: "$", display: false },
+            { left: "\\(", right: "\\)", display: false },
+            { left: "\\[", right: "\\]", display: true },
+          ],
+          throwOnError: false,
+        });
+      }
+
+      function renderMarkdown(md, label) {
+        if (!window.marked) {
+          setEmptyState(true, "Markdown parser failed to load");
+          return;
+        }
+        output.innerHTML = marked.parse(md, {
+          gfm: true,
+          breaks: false,
+          mangle: false,
+          headerIds: false,
+        });
+        setEmptyState(false, label || "Markdown loaded");
+        generateTOC();
+        renderMath();
+      }
+
+      function generateTOC() {
+        const headings = output.querySelectorAll("h1, h2, h3, h4, h5, h6");
+
+        tocList.innerHTML = "";
+
+        if (!headings.length) {
+          const empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = "No headings found";
+          tocList.appendChild(empty);
+          return;
+        }
+
+        const ul = document.createElement("ul");
+        const counts = new Map();
+        for (const heading of headings) {
+          const level = Number(heading.tagName[1]);
+          if (!heading.id) {
+            const base = slugify(heading.textContent);
+            const count = counts.get(base) || 0;
+            const id = count ? `${base}-${count + 1}` : base;
+            counts.set(base, count + 1);
+            heading.id = id;
+          }
+          const li = document.createElement("li");
+          const a = document.createElement("a");
+          a.href = `#${heading.id}`;
+          a.textContent = heading.textContent;
+          a.style.paddingLeft = `${(level - 1) * 12}px`;
+          li.appendChild(a);
+          ul.appendChild(li);
+        }
+        tocList.appendChild(ul);
+      }
+
+      async function handleFile(file) {
+        if (!file) {
+          return;
+        }
+        const isMarkdown = /\.(md|markdown)$/i.test(file.name);
+        if (!isMarkdown) {
+          setEmptyState(true, "Please drop a .md file");
+          return;
+        }
+
+        const md = await file.text();
+        renderMarkdown(md, `Viewing ${file.name}`);
+      }
+
+      document.addEventListener("dragover", (event) => {
+        event.preventDefault();
+        if (event.dataTransfer) {
+          event.dataTransfer.dropEffect = "copy";
+        }
+      });
+
+      document.addEventListener("drop", (event) => {
+        event.preventDefault();
+        const transfer = event.dataTransfer;
+        const file =
+          transfer && transfer.files && transfer.files.length
+            ? transfer.files[0]
+            : null;
+        handleFile(file);
+      });
+
+      document.addEventListener("click", (event) => {
+        if (content.dataset.empty !== "true") {
+          return;
+        }
+        const target = event.target;
+        if (target === tocToggle || target === tocScrim || toc.contains(target)) {
+          return;
+        }
+        fileInput.click();
+      });
+
+      tocToggle.addEventListener("click", () => {
+        setTocOpen(!tocOpen);
+      });
+
+      tocScrim.addEventListener("click", () => {
+        setTocOpen(false);
+      });
+
+      tocList.addEventListener("click", (event) => {
+        if (event.target.tagName === "A" && tocMedia.matches) {
+          setTocOpen(false);
+        }
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && tocOpen && tocMedia.matches) {
+          setTocOpen(false);
+        }
+      });
+
+      fileInput.addEventListener("change", (event) => {
+        handleFile(event.target.files[0]);
+        fileInput.value = "";
+      });
+
+      window.addEventListener("load", () => {
+        if (location.protocol === "file:") {
+          setEmptyState(true, "Drop a .md file anywhere or click to choose");
+          return;
+        }
+        fetch("./sample.md")
+          .then((response) => response.text())
+          .then((md) => md && renderMarkdown(md, "Viewing sample.md"))
+          .catch(() => setEmptyState(true, "No file loaded"));
+      });
+    </script>
+  </body>
+</html>
